@@ -1,6 +1,10 @@
 #adapted from https://github.com/Sanghoon94/DailyDialogue-Parser/blob/master/parser.py
-import os, sys
+import os, sys, torch
 from torch.utils.data import Dataset
+from transforms import SpacyTokenizer, ToTokenIds, ReplaceUnknownToken #, ToTensor
+from torchvision.transforms import Compose
+
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def check_dirs(dir_list):
@@ -18,23 +22,33 @@ class DailyDialogue(Dataset):
         self.input_dir = input_dir
         self.split = split
         self.text_transforms = text_transforms
-        self.sequences, self.emotions, self.actions = self.parse_data(self.input_dir, self.split)
+        self.sequences, self.emotions, self.actions, self.speakers = self.parse_data(self.input_dir, self.split)
 
     def __len__(self):
         return len(self.label)
 
-    def parse_data(input_dir, split='train'):
+    def preprocess(self, sequences):
+        output = []
+        for dialog in sequences:
+            for utt in dialog:
+                output.append(self.text_transforms(utt))
+        return output
+
+
+    def parse_data(self, input_dir, split='train'):
         # Finding files
-        dial_dir = os.path.join(input_dir, split, 'dialogues_{split}.txt')
-        emo_dir = os.path.join(input_dir, split,  'dialogues_emotion_{split}.txt')
-        act_dir = os.path.join(input_dir, split, 'dialogues_act_{split}.txt')
+        dial_dir = os.path.join(input_dir, split, f'dialogues_{split}.txt')
+        emo_dir = os.path.join(input_dir, split,  f'dialogues_emotion_{split}.txt')
+        act_dir = os.path.join(input_dir, split, f'dialogues_act_{split}.txt')
 
         #open input
         in_dial = open(dial_dir, 'r'); in_emo = open(emo_dir, 'r'); in_act = open(act_dir, 'r')
-        emotions = []; dacts = []; sequences = []
 
-        import pdb; pdb.set_trace()
+        emotions = []; dacts = []; sequences = []; spkrs = []
         for line_count, (line_dial, line_emo, line_act) in enumerate(zip(in_dial, in_emo, in_act)):
+
+            print(line_count)
+
             seqs = line_dial.split('__eou__')
             seqs = seqs[:-1] #remove newline char
 
@@ -47,17 +61,10 @@ class DailyDialogue(Dataset):
                     speaker = '1' # speaker B
                 speakers.append(speaker)
 
-            emos = line_emo.split(' ')
-            emos = emos[:-1]
-
-            acts = line_act.split(' ')
-            acts = acts[:-1]
-            
+            emos = line_emo.split(' ')[:-1]
+            acts = line_act.split(' ')[:-1]            
             seq_len = len(seqs); emo_len = len(emos); act_len = len(acts)
-
-            emotions.append(emos)
-            dacts.append(acts)
-            sequences.append(secs)
+            emotions.append(emos); dacts.append(acts); sequences.append(seqs); spkrs.append(speakers)
 
             try:
                 assert seq_len == emo_len == act_len
@@ -67,14 +74,20 @@ class DailyDialogue(Dataset):
                 print('Skipping this entry.')
 
             for seq, emo, act, speaker in zip(seqs, emos, acts, speakers):
-
                 # Get rid of the blanks at the start & end of each turns
                 if seq[0] == ' ':
                     seq = seq[1:]
                 if seq[-1] == ' ':
                     seq = seq[:-1]
 
-        return sequences, emotions, dacts
+            if self.text_transforms is not None:
+                sequences = self.preprocess(sequences)
+
+        return sequences, emotions, dacts, spkrs
+
+
+
+
 
     def __getitem__(self, idx):
         return self.preprocessed[idx]
@@ -82,8 +95,23 @@ class DailyDialogue(Dataset):
 
 if __name__ == '__main__':
     cwd = os.getcwd()
-    input_dir = cwd + '../data/EMNLP_dataset/'
-    output_dir = cwd + '../data/EMNLP_dataset/'
+    input_dir = cwd + '/../data/EMNLP_dataset/'
     splits = ['train', 'test', 'validation']
+
+    tokenizer = SpacyTokenizer()
+    replace_unknowns = ReplaceUnknownToken()
+    #to_token_ids = ToTokenIds(word2idx)
+    #to_tensor = ToTensor(device=DEVICE)
+
     for split in splits:
-        dataset = DailyDialogue(input_dir, split)
+        import pdb; pdb.set_trace()
+        dataset = DailyDialogue(input_dir, split,
+            text_transforms = Compose([
+            tokenizer,
+            replace_unknowns,
+            #to_token_ids,
+            #to_tensor
+            ]))
+
+
+
