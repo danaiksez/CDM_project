@@ -57,7 +57,7 @@ class DailyDialogue(Dataset):
 
             emotions.append(emos)
             dacts.append(acts)
-            sequences.append(secs)
+            sequences.append(seqs)
 
             try:
                 assert seq_len == emo_len == act_len
