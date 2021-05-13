@@ -79,7 +79,7 @@ class DailyDialogue(Dataset):
 
 class DailyDialogDataloader(BaseDataLoader):
     def __init__(self, data_dir, split="train", batch_size=32, shuffle=False, validation_split=0.1, num_workers=2, collate_fn=None):
-        loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.840B.300d.txt', 300)
+        loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
         word2idx, idx2word, embeddings = loader.load()
         embeddings = torch.tensor(embeddings)
         

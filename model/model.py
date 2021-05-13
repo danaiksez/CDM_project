@@ -3,44 +3,44 @@ import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel
 
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 class ThreeEncoders(BaseModel):
     def __init__(self, embedding_size, hidden_size, num_classes, batch_first=False, bidirectional=False):
         super().__init__()
         self.batch_first = batch_first
         self.bidirectional = bidirectional
-        self.encoder1 = nn.LSTM(embedding_size, hidden_size, batch_first=self.batch_first, bidirectional=self.bidirectional)
-        self.encoder2 = nn.LSTM(embedding_size, hidden_size, batch_first=self.batch_first, bidirectional=self.bidirectional)
+        self.speaker1 = nn.LSTM(embedding_size, hidden_size, batch_first=self.batch_first, bidirectional=self.bidirectional)
+        self.speaker2 = nn.LSTM(embedding_size, hidden_size, batch_first=self.batch_first, bidirectional=self.bidirectional)
         self.context_encoder = nn.LSTM(embedding_size, hidden_size, batch_first=self.batch_first, bidirectional=self.bidirectional)
         self.linear = nn.Linear(hidden_size, num_classes)
 
-    def forward(self, x, turns):
-        for (utt, turn) in zip(x, turns):
-            inputs = torch.cat(self.context, utt)
-            if turn == 0:
-                output = self.encoder1(inputs)
+    def _init_hidden_state(self, last_batch_size=None):
+        if last_batch_size:
+            batch_size = last_batch_size
+        else:
+            batch_size = self.batch_size
+        self.speaker1_hidden_state = torch.zeros(2, batch_size, self.hidden_size)
+        self.speaker2_hidden_state = torch.zeros(2, batch_size, self.hidden_size)
+        self.context_hidden_state = torch.zeros(2, batch_size, self.hidden_size)
+        self.speaker1_hidden_state = self.speaker1_hidden_state.to(DEVICE)
+        self.speaker2_hidden_state = self.speaker2_hidden_state.to(DEVICE)
+        self.context_hidden_state = self.context_hidden_state.to(DEVICE)
+
+    def forward(self, utterances, speakers):
+        if not hasattr(self, "self.context_hidden_state"):
+            self._init_hidden_state()
+
+        for (utterance, speaker) in zip(utterances, speakers):
+            outputs = []
+            if speaker == 0:
+                inputt = torch.cat(self.context_output, utterance)
+                output1, self.speaker1_hidden_state = self.speaker1(inputt)
+                self.context_output, self.context_hidden_state = self.context_encoder(self.speaker1_hidden_state)
+                outputs.append(output1)
             else:
-                output = self.encoder2(inputs)
-            self.context, (_, _) = self.context_encoder(output)
-            output = self.linear(output)
-        return output
-
-"""
-class MnistModel(BaseModel):
-    def __init__(self, num_classes=10):
-        super().__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.conv2_drop = nn.Dropout2d()
-        self.fc1 = nn.Linear(320, 50)
-        self.fc2 = nn.Linear(50, num_classes)
-
-    def forward(self, x):
-        x = F.relu(F.max_pool2d(self.conv1(x), 2))
-        x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
-        x = x.view(-1, 320)
-        x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training)
-        x = self.fc2(x)
-        return F.log_softmax(x, dim=1)
-"""
+                inputt = torch.cat(self.context_output, utterance)
+                output2, self.speaker2_hidden_state = self.speaker2(inputt)
+                self.context_output, self.context_hidden_state = self.context_encoder(self.speaker2_hidden_state)
+                outputs.append(output2)
+        return outputs
