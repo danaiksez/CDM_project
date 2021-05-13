@@ -6,7 +6,7 @@ import sentencepiece as spm
 
 from spacy.attrs import ORTH
 
-from nlp import SPECIAL_TOKENS
+from data_loader.nlp import SPECIAL_TOKENS
 from slp.util import mktensor
 from nltk import WordPunctTokenizer
 

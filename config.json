@@ -4,28 +4,34 @@
 
     "arch": {
         "type": "ThreeEncoders",
-        "args": {}
+        "args": {
+            "embedding_size": 300,
+            "hidden_size": 300,
+            "num_classes": 7,
+            "batch_first": "False",
+            "bidirectional": "True"
+        }
     },
     "train_data_loader": {
         "type": "DailyDialogDataloader",
         "args":{
             "data_dir": "data/EMNLP_dataset/",
             "split": "train",
-            "batch_size": 128,
+            "batch_size": 1,
             "shuffle": true,
-            "validation_split": 0.1,
-            "num_workers": 2
+            "validation_split": 0.0,
+            "num_workers": 1
         }
     },
     "valid_data_loader": {
         "type": "DailyDialogDataloader",
         "args":{
             "data_dir": "data/EMNLP_dataset/",
-            "split": "val",
-            "batch_size": 128,
+            "split": "validation",
+            "batch_size": 1,
             "shuffle": true,
             "validation_split": 0.1,
-            "num_workers": 2
+            "num_workers": 1
         }
     },
     "test_data_loader": {
@@ -33,10 +39,10 @@
         "args":{
             "data_dir": "data/EMNLP_dataset/",
             "split": "test",
-            "batch_size": 128,
+            "batch_size": 1,
             "shuffle": true,
             "validation_split": 0.1,
-            "num_workers": 2
+            "num_workers": 1
         }
     },
     "optimizer": {
@@ -47,7 +53,7 @@
             "amsgrad": true
         }
     },
-    "loss": "nll_loss",
+    "loss": "bce_loss",
     "metrics": [
         "accuracy", "top_k_acc"
     ],
@@ -59,7 +65,7 @@
         }
     },
     "trainer": {
-        "epochs": 100,
+        "epochs": 10,
 
         "save_dir": "saved/",
         "save_period": 1,

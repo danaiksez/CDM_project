@@ -71,7 +71,7 @@ class DailyDialogue(Dataset):
                     seq = self.text_transforms(remove_punctuation(seq))
                 segment.append(seq)
             
-            emotions.append(emos); dacts.append(acts); sequences.append(segment); spkrs.append(speakers)
+            emotions.append(torch.tensor(emos)); dacts.append(acts); sequences.append(segment); spkrs.append(speakers)
         return sequences, emotions, dacts, spkrs
 
     def __getitem__(self, idx):

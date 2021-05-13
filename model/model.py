@@ -28,19 +28,19 @@ class ThreeEncoders(BaseModel):
         self.context_hidden_state = self.context_hidden_state.to(DEVICE)
 
     def forward(self, utterances, speakers):
-        if not hasattr(self, "self.context_hidden_state"):
+        if not hasattr(self, "context_hidden_state"): #TODO: should we 'clear' the hidden state for each new dialog?
             self._init_hidden_state()
 
         for (utterance, speaker) in zip(utterances, speakers):
             outputs = []
             if speaker == 0:
                 inputt = torch.cat(self.context_output, utterance)
-                output1, self.speaker1_hidden_state = self.speaker1(inputt)
+                output, self.speaker1_hidden_state = self.speaker1(inputt)
                 self.context_output, self.context_hidden_state = self.context_encoder(self.speaker1_hidden_state)
-                outputs.append(output1)
             else:
                 inputt = torch.cat(self.context_output, utterance)
-                output2, self.speaker2_hidden_state = self.speaker2(inputt)
+                output, self.speaker2_hidden_state = self.speaker2(inputt)
                 self.context_output, self.context_hidden_state = self.context_encoder(self.speaker2_hidden_state)
-                outputs.append(output2)
+            output = self.linear(output)    #TODO: should we have one shared linear layer or one for each speaker's encoder?
+            outputs.append(output)
         return outputs
