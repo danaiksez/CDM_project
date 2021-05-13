@@ -3,13 +3,36 @@
     "n_gpu": 1,
 
     "arch": {
-        "type": "MnistModel",
+        "type": "ThreeEncoders",
         "args": {}
     },
-    "data_loader": {
-        "type": "MnistDataLoader",
+    "train_data_loader": {
+        "type": "DailyDialogDataloader",
         "args":{
-            "data_dir": "data/",
+            "data_dir": "data/EMNLP_dataset/",
+            "split": "train",
+            "batch_size": 128,
+            "shuffle": true,
+            "validation_split": 0.1,
+            "num_workers": 2
+        }
+    },
+    "valid_data_loader": {
+        "type": "DailyDialogDataloader",
+        "args":{
+            "data_dir": "data/EMNLP_dataset/",
+            "split": "val",
+            "batch_size": 128,
+            "shuffle": true,
+            "validation_split": 0.1,
+            "num_workers": 2
+        }
+    },
+    "test_data_loader": {
+        "type": "DailyDialogDataloader",
+        "args":{
+            "data_dir": "data/EMNLP_dataset/",
+            "split": "test",
             "batch_size": 128,
             "shuffle": true,
             "validation_split": 0.1,

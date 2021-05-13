@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel
@@ -17,7 +18,7 @@ class ThreeEncoders(BaseModel):
         for (utt, turn) in zip(x, turns):
             inputs = torch.cat(self.context, utt)
             if turn == 0:
-                output = self.encoder1(inputs))
+                output = self.encoder1(inputs)
             else:
                 output = self.encoder2(inputs)
             self.context, (_, _) = self.context_encoder(output)
