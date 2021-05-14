@@ -4,6 +4,7 @@ from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 
+torch.autograd.set_detect_anomaly(True)
 
 class Trainer(BaseTrainer):
     """
@@ -40,27 +41,27 @@ class Trainer(BaseTrainer):
         """
         self.model.train()
         self.train_metrics.reset()
-        import pdb; pdb.set_trace()
         for batch_idx, (data, target, acts, spkrs) in enumerate(self.train_data_loader):
             #data, target = data.to(self.device), target.to(self.device)
-
+        
             self.optimizer.zero_grad()
             output = self.model(data, spkrs)
+            #import pdb; pdb.set_trace()
             loss = self.criterion(output, target)
-            loss.backward()
+            loss.backward(retain_graph=True)
             self.optimizer.step()
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
             for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, target))
+                self.train_metrics.update(met.__name__, met(output, target.squeeze(0)))
 
             if batch_idx % self.log_step == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
                     epoch,
                     self._progress(batch_idx),
                     loss.item()))
-                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                #self.writer.add_image('input', make_grid(data, nrow=8, normalize=True)) #corrected data.cpu()
 
             if batch_idx == self.len_epoch:
                 break
@@ -85,7 +86,7 @@ class Trainer(BaseTrainer):
         self.valid_metrics.reset()
         with torch.no_grad():
             for batch_idx, (data, target, acts, spkrs) in enumerate(self.valid_data_loader):
-                data, target = data.to(self.device), target.to(self.device)
+                #data, target = data.to(self.device), target.to(self.device)
 
                 output = self.model(data, spkrs)
                 loss = self.criterion(output, target)
@@ -94,7 +95,7 @@ class Trainer(BaseTrainer):
                 self.valid_metrics.update('loss', loss.item())
                 for met in self.metric_ftns:
                     self.valid_metrics.update(met.__name__, met(output, target))
-                self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
+                #self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():

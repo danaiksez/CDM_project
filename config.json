@@ -7,9 +7,10 @@
         "args": {
             "embedding_size": 300,
             "hidden_size": 300,
+            "batch_size": 1,
             "num_classes": 7,
-            "batch_first": "False",
-            "bidirectional": "True"
+            "batch_first": "True",
+            "bidirectional": "False"
         }
     },
     "train_data_loader": {
@@ -20,7 +21,7 @@
             "batch_size": 1,
             "shuffle": true,
             "validation_split": 0.0,
-            "num_workers": 1
+            "num_workers": 0
         }
     },
     "valid_data_loader": {
@@ -53,7 +54,7 @@
             "amsgrad": true
         }
     },
-    "loss": "bce_loss",
+    "loss": "CrossEntropy_loss",
     "metrics": [
         "accuracy", "top_k_acc"
     ],
