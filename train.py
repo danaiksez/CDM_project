@@ -23,9 +23,10 @@ def main(config):
 
     # setup data_loader instances
     train_data_loader = config.init_obj('train_data_loader', module_data)
+    valid_data_loader = train_data_loader.split_validation()
     #valid_data_loader = config.init_obj('valid_data_loader', module_data)
     #test_data_loader = config.init_obj('test_data_loader', module_data)
-    valid_data_loader = None
+    #valid_data_loader = None
     test_data_loader = None
 
     # build model architecture, then print to console

@@ -32,6 +32,7 @@ class ThreeEncoders(BaseModel):
         self.hidden_size = hidden_size
         self.num_classes = num_classes
 
+        self.attention = True
         self.diction = load_embeddings()
         self.dict_size = len(self.diction)
         self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction)
@@ -44,9 +45,21 @@ class ThreeEncoders(BaseModel):
         if self.bidirectional:
             self.linear1 = nn.Linear(2 * hidden_size, self.num_classes)
             self.linear2 = nn.Linear(2 * hidden_size, self.num_classes)
+            if self.attention:
+                self.word1 = nn.Linear(2 * hidden_size, 2 * hidden_size)
+                self.context1 = nn.Linear(2 * hidden_size, 1, bias=False)
+                self.word2 = nn.Linear(2 * hidden_size, 2 * hidden_size)
+                self.context2 = nn.Linear(2 * hidden_size, 1, bias=False)
+
         else:
             self.linear1 = nn.Linear(hidden_size, self.num_classes)
             self.linear2 = nn.Linear(hidden_size, self.num_classes)
+            if self.attention:
+                self.word1 = nn.Linear(hidden_size, hidden_size)
+                self.context1 = nn.Linear(hidden_size, 1, bias=False)
+                self.word2 = nn.Linear(hidden_size, hidden_size)
+                self.context2 = nn.Linear(hidden_size, 1, bias=False)
+
 
     def _init_hidden_state(self, last_batch_size=None):
         if last_batch_size:
@@ -68,7 +81,7 @@ class ThreeEncoders(BaseModel):
         if not hasattr(self, "context_hidden_state"): #TODO: should we 'clear' the hidden state for each new dialog?
             self._init_hidden_state()
 
-        outputs = []
+        outputs = None if self.attention else []
         if speakers.shape[0] == 1:
             speakers = speakers[0]
         for (utterance, speaker) in zip(utterances, speakers):
@@ -83,6 +96,13 @@ class ThreeEncoders(BaseModel):
                                                                     self.context_hidden_state)
                 self.context_hidden_state = repackage_hidden(self.context_hidden_state)
                 # context_output: (B, 1, 300), context_hidden_state: (1, B, 300)
+
+                if self.attention:
+                    output_a = self.word1(output)
+                    output_a = self.context1(output_a)
+                    output_a = F.softmax(output_a,dim=1)
+                    output = (output * output_a).sum(1)
+
                 output = self.linear1(output)
             else:
                 inputt = torch.cat((self.context_output, output_emb), dim=1)
@@ -92,6 +112,21 @@ class ThreeEncoders(BaseModel):
                                                                     self.speaker2_hidden_state, 
                                                                     self.context_hidden_state)
                 self.context_hidden_state = repackage_hidden(self.context_hidden_state)
+
+                if self.attention:
+                    output_a = self.word2(output)
+                    output_a = self.context2(output_a)
+                    output_a = F.softmax(output_a,dim=1)
+                    output = (output * output_a).sum(1)
+
                 output = self.linear2(output)
-            outputs.append(output[0][-1])  # output: (B, S+1, classes)
-        return torch.stack(outputs)
+
+            #import pdb; pdb.set_trace()
+            if self.attention:
+                if outputs == None:
+                    outputs = output
+                else:
+                    outputs = torch.cat((outputs, output), dim=0)
+            else:
+                outputs.append(output[0][-1])  # output: (B, S+1, classes)
+        return outputs if self.attention else torch.stack(outputs)

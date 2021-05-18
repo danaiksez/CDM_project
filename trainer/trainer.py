@@ -46,7 +46,6 @@ class Trainer(BaseTrainer):
         
             self.optimizer.zero_grad()
             output = self.model(data, spkrs)
-            #import pdb; pdb.set_trace()
             loss = self.criterion(output, target)
             loss.backward(retain_graph=True)
             self.optimizer.step()
@@ -56,7 +55,8 @@ class Trainer(BaseTrainer):
             for met in self.metric_ftns:
                 self.train_metrics.update(met.__name__, met(output, target.squeeze(0)))
 
-            if batch_idx % self.log_step == 0:
+            #if batch_idx % self.log_step == 0:
+            if batch_idx % 10 == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
                     epoch,
                     self._progress(batch_idx),
@@ -94,7 +94,7 @@ class Trainer(BaseTrainer):
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
                 for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, target))
+                    self.valid_metrics.update(met.__name__, met(output, target.squeeze(0)))
                 #self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
 
         # add histogram of model parameters to the tensorboard
