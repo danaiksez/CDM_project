@@ -5,15 +5,16 @@ from base import BaseModel
 
 from slp.util.embeddings import EmbeddingsLoader
 
-DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-
+# DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+DEVICE = 'cuda'
+print("using device", DEVICE)
 
 def load_embeddings():
     cwd = os.getcwd()
     loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
     word2idx, idx2word, embeddings = loader.load()
     embeddings = torch.tensor(embeddings)
-    return embeddings
+    return embeddings.to(DEVICE)
 
 def repackage_hidden(h):
     """Wraps hidden states in new Tensors, to detach them from their history."""
@@ -33,14 +34,14 @@ class ThreeEncoders(BaseModel):
         self.num_classes = num_classes
 
         self.attention = True
-        self.diction = load_embeddings()
+        self.diction = load_embeddings().to(DEVICE)
         self.dict_size = len(self.diction)
-        self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction)
+        self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction).to(DEVICE)
 
         self.speaker1 = nn.GRU(input_size=embedding_size, hidden_size=hidden_size, batch_first=True, bidirectional=False)
         self.speaker2 = nn.GRU(input_size=embedding_size, hidden_size=hidden_size, batch_first=True, bidirectional=False)
         self.context_encoder = nn.GRU(input_size=embedding_size, hidden_size=hidden_size, batch_first=False, bidirectional=False)
-        
+
         self.bidirectional = False
         if self.bidirectional:
             self.linear1 = nn.Linear(2 * hidden_size, self.num_classes)
@@ -75,7 +76,7 @@ class ThreeEncoders(BaseModel):
         self.speaker2_hidden_state = self.speaker2_hidden_state.to(DEVICE)
         self.context_hidden_state = self.context_hidden_state.to(DEVICE)
         self.context_output = self.context_output.to(DEVICE)
-        
+
 
     def forward(self, utterances, speakers):
         if not hasattr(self, "context_hidden_state"): #TODO: should we 'clear' the hidden state for each new dialog?
@@ -85,14 +86,14 @@ class ThreeEncoders(BaseModel):
         if speakers.shape[0] == 1:
             speakers = speakers[0]
         for (utterance, speaker) in zip(utterances, speakers):
-            output_emb = self.lookup(utterance) # (B, S, 300)
+            output_emb = self.lookup(utterance).to(DEVICE) # (B, S, 300)
             if speaker == 0:
                 inputt = torch.cat((self.context_output, output_emb), dim=1) #(B, S+1, 300)
                 output, self.speaker1_hidden_state = self.speaker1(inputt, self.speaker1_hidden_state)
                 self.speaker1_hidden_state = repackage_hidden(self.speaker1_hidden_state)
 
                 self.context_output, self.context_hidden_state = self.context_encoder(
-                                                                    self.speaker1_hidden_state, 
+                                                                    self.speaker1_hidden_state,
                                                                     self.context_hidden_state)
                 self.context_hidden_state = repackage_hidden(self.context_hidden_state)
                 # context_output: (B, 1, 300), context_hidden_state: (1, B, 300)
@@ -109,7 +110,7 @@ class ThreeEncoders(BaseModel):
                 output, self.speaker2_hidden_state = self.speaker2(inputt, self.speaker2_hidden_state)
                 self.speaker2_hidden_state= repackage_hidden(self.speaker2_hidden_state)
                 self.context_output, self.context_hidden_state = self.context_encoder(
-                                                                    self.speaker2_hidden_state, 
+                                                                    self.speaker2_hidden_state,
                                                                     self.context_hidden_state)
                 self.context_hidden_state = repackage_hidden(self.context_hidden_state)
 
@@ -128,5 +129,42 @@ class ThreeEncoders(BaseModel):
                 else:
                     outputs = torch.cat((outputs, output), dim=0)
             else:
-                outputs.append(output[0][-1])  # output: (B, S+1, classes)
-        return outputs if self.attention else torch.stack(outputs)
+                outputs.append(output[0][-1])  # output: (B, S+1, classes
+
+        self.speaker1_hidden_state = self.speaker1_hidden_state.detach()
+        self.speaker2_hidden_state = self.speaker2_hidden_state.detach()
+        self.context_hidden_state = self.context_hidden_state.detach()
+        return outputs.to(DEVICE) if self.attention else torch.stack(outputs).to(DEVICE)
+
+class LSTM(nn.Module):
+    def __init__(self, input_size,  hidden, num_layers,output_size, batch_first = True):
+        super(LSTM, self).__init__()
+        self.num_layers = num_layers
+        self.hidden = hidden
+
+        self.diction = load_embeddings()
+        self.dict_size = len(self.diction)
+        self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction)
+        # print('belangrijk', input_size, hidden, num_layers)
+        self.lstm = nn.LSTM(input_size, hidden,num_layers, batch_first= True)
+        self.output = nn.Linear(hidden, output_size)
+
+    def forward(self, input):
+        # output_emb = []
+        output = []
+        for utterance in input:
+            output_emb = self.lookup(utterance) # (B, S, 300)
+        # input = torch.cat(output_emb, dim=1)
+            h_0 = torch.zeros(self.num_layers, 1, self.hidden).to(DEVICE)
+            c_0 = torch.zeros(self.num_layers, 1, self.hidden).to(DEVICE)
+            out,_ = self.lstm(output_emb, (h_0,c_0))
+            out = out[:, -1,:]
+            # out = self.output(out)
+            print(out)
+            output.append(out[0])
+        # print("output voor engheid", output)
+        outputs = torch.stack(output,dim=0)
+        # self.output = outputs
+        # print("this is the output", outputs)
+        output_total = self.output(outputs)
+        return output_total.to(DEVICE)

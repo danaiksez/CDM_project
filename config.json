@@ -3,14 +3,13 @@
     "n_gpu": 0,
 
     "arch": {
-        "type": "ThreeEncoders",
+        "type": "LSTM",
         "args": {
-            "embedding_size": 300,
-            "hidden_size": 300,
-            "batch_size": 1,
-            "num_classes": 7,
-            "batch_first": "True",
-            "bidirectional": "False"
+            "input_size": 300,
+            "hidden": 300,
+            "num_layers": 1,
+            "output_size": 7,
+            "batch_first": "True"
         }
     },
     "train_data_loader": {
@@ -71,7 +70,7 @@
         "save_dir": "saved/",
         "save_period": 1,
         "verbosity": 2,
-        
+
         "monitor": "min val_loss",
         "early_stop": 8,
 

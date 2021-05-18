@@ -5,7 +5,7 @@ from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 
 torch.autograd.set_detect_anomaly(True)
-
+DEVICE = 'cuda'
 class Trainer(BaseTrainer):
     """
     Trainer class
@@ -18,6 +18,7 @@ class Trainer(BaseTrainer):
         self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
         self.test_data_loader = test_data_loader
+        self.model = model.to(DEVICE)
         if len_epoch is None:
             # epoch-based training
             self.len_epoch = len(self.train_data_loader)
@@ -39,13 +40,16 @@ class Trainer(BaseTrainer):
         :param epoch: Integer, current training epoch.
         :return: A log that contains average loss and metric in this epoch.
         """
+        self.model.to(DEVICE)
         self.model.train()
         self.train_metrics.reset()
         for batch_idx, (data, target, acts, spkrs) in enumerate(self.train_data_loader):
-            #data, target = data.to(self.device), target.to(self.device)
-        
+            # data, spkrs = data.to(DEVICE), spkrs.to(DEVICE)
+            target = target.to(DEVICE)
             self.optimizer.zero_grad()
-            output = self.model(data, spkrs)
+            # print('device?')
+            output = self.model(data)
+            # print("deviceo of output is",output.device)
             loss = self.criterion(output, target)
             loss.backward(retain_graph=True)
             self.optimizer.step()
