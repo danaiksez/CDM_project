@@ -5,19 +5,23 @@ from base import BaseTrainer
 from utils import inf_loop, MetricTracker
 
 torch.autograd.set_detect_anomaly(True)
-DEVICE = 'cuda'
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
 class Trainer(BaseTrainer):
     """
     Trainer class
     """
     def __init__(self, model, criterion, metric_ftns, optimizer, config, device,
-                 train_data_loader, valid_data_loader=None, test_data_loader=None, lr_scheduler=None, len_epoch=None):
+                 train_data_loader, valid_data_loader=None, test_data_loader=None, 
+                 lr_scheduler=None, len_epoch=None, threeEncoders='none'):
         super().__init__(model, criterion, metric_ftns, optimizer, config)
         self.config = config
         self.device = device
         self.train_data_loader = train_data_loader
         self.valid_data_loader = valid_data_loader
         self.test_data_loader = test_data_loader
+        self.threeEncoders = threeEncoders
         self.model = model.to(DEVICE)
         if len_epoch is None:
             # epoch-based training
@@ -43,15 +47,46 @@ class Trainer(BaseTrainer):
         self.model.to(DEVICE)
         self.model.train()
         self.train_metrics.reset()
-        for batch_idx, (data, target, acts, spkrs) in enumerate(self.train_data_loader):
+
+        #for batch_idx, (data, lengths, target, sentences_number) in enumerate(self.train_data_loader):
+        for batch_idx, (data, target, actions, speakers) in enumerate(self.train_data_loader):
             # data, spkrs = data.to(DEVICE), spkrs.to(DEVICE)
             target = target.to(DEVICE)
             self.optimizer.zero_grad()
-            # print('device?')
-            output = self.model(data)
-            # print("deviceo of output is",output.device)
+            self.model._init_hidden_state()
+            if 'ThreeEncoders' in self.threeEncoders:
+                output = self.model(data, speakers)
+            else:
+                output = self.model(data)
+            
+            """
+            lengths_numpy = lengths.numpy()
+            target_numpy = target.numpy()
+            if 0 in lengths:
+                import pdb; pdb.set_trace()
+                idx = np.where(lengths_numpy[0] == 0)[0]
+                target = torch.tensor(np.delete(target_numpy, idx)).unsqueeze(0)
+
+            output = self.model(data, lengths)
+            if output.size(0) != lengths.size(1):
+                import pdb; pdb.set_trace()
+                continue
+            """
+            #import pdb; pdb.set_trace()
+            if output.size(0) != target.size(1):
+                import pdb; pdb.set_trace
+                idx = []
+                for i in range(len(data)):
+                    if data[i].size(1) == 0:
+                        idx.append(i)
+                target_numpy = target.clone().cpu()
+                target_numpy = np.delete(target_numpy, idx)
+                target = torch.tensor(target_numpy).to(DEVICE)
+                import pdb; pdb.set_trace
+
             loss = self.criterion(output, target)
-            loss.backward(retain_graph=True)
+            #loss.backward(retain_graph=True)
+            loss.backward()
             self.optimizer.step()
 
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
@@ -60,7 +95,7 @@ class Trainer(BaseTrainer):
                 self.train_metrics.update(met.__name__, met(output, target.squeeze(0)))
 
             #if batch_idx % self.log_step == 0:
-            if batch_idx % 10 == 0:
+            if batch_idx % 100 == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
                     epoch,
                     self._progress(batch_idx),
@@ -91,8 +126,24 @@ class Trainer(BaseTrainer):
         with torch.no_grad():
             for batch_idx, (data, target, acts, spkrs) in enumerate(self.valid_data_loader):
                 #data, target = data.to(self.device), target.to(self.device)
+                #self.model._init_hidden_state()
+                target = target.to(DEVICE)
+                if 'ThreeEncoders' in self.threeEncoders:
+                    output = self.model(data, spkrs)
+                else:
+                    output = self.model(data)
+                
+                if output.size(0) != target.size(1):
+                    import pdb; pdb.set_trace
+                    idx = []
+                    for i in range(len(data)):
+                        if data[i].size(1) == 0:
+                            idx.append(i)
+                    target_numpy = target.clone().cpu()
+                    target_numpy = np.delete(target_numpy, idx)
+                    target = torch.tensor(target_numpy).to(DEVICE)
+                    import pdb; pdb.set_trace
 
-                output = self.model(data, spkrs)
                 loss = self.criterion(output, target)
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')

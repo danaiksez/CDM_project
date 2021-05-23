@@ -54,7 +54,8 @@ def main(config):
                       train_data_loader=train_data_loader,
                       valid_data_loader=valid_data_loader,
                       test_data_loader=test_data_loader,
-                      lr_scheduler=lr_scheduler)
+                      lr_scheduler=lr_scheduler,
+                      threeEncoders=config['arch']['type'])
 
     trainer.train()
 
