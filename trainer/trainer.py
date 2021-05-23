@@ -54,27 +54,13 @@ class Trainer(BaseTrainer):
             target = target.to(DEVICE)
             self.optimizer.zero_grad()
             self.model._init_hidden_state()
+
             if 'ThreeEncoders' in self.threeEncoders:
                 output = self.model(data, speakers)
             else:
                 output = self.model(data)
             
-            """
-            lengths_numpy = lengths.numpy()
-            target_numpy = target.numpy()
-            if 0 in lengths:
-                import pdb; pdb.set_trace()
-                idx = np.where(lengths_numpy[0] == 0)[0]
-                target = torch.tensor(np.delete(target_numpy, idx)).unsqueeze(0)
-
-            output = self.model(data, lengths)
-            if output.size(0) != lengths.size(1):
-                import pdb; pdb.set_trace()
-                continue
-            """
-            #import pdb; pdb.set_trace()
             if output.size(0) != target.size(1):
-                import pdb; pdb.set_trace
                 idx = []
                 for i in range(len(data)):
                     if data[i].size(1) == 0:
@@ -82,17 +68,19 @@ class Trainer(BaseTrainer):
                 target_numpy = target.clone().cpu()
                 target_numpy = np.delete(target_numpy, idx)
                 target = torch.tensor(target_numpy).to(DEVICE)
-                import pdb; pdb.set_trace
 
             loss = self.criterion(output, target)
             #loss.backward(retain_graph=True)
             loss.backward()
             self.optimizer.step()
 
+            #import pdb; pdb.set_trace()
+
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
             for met in self.metric_ftns:
-                self.train_metrics.update(met.__name__, met(output, target.squeeze(0)))
+                if met.__name__ == 'accuracy':
+                    self.train_metrics.update(met.__name__, met(output, target.squeeze(0)))
 
             #if batch_idx % self.log_step == 0:
             if batch_idx % 100 == 0:
@@ -100,6 +88,14 @@ class Trainer(BaseTrainer):
                     epoch,
                     self._progress(batch_idx),
                     loss.item()))
+
+                """
+                for met in self.metric_ftns:
+                    if met.__name__ != "accuracy":
+                        score = met(output, target.squeeze(0))
+                        for i in range(len(score)):
+                            print(met.__name__ + "_" + str(i) + ": " + str(score[i]))
+                """
                 #self.writer.add_image('input', make_grid(data, nrow=8, normalize=True)) #corrected data.cpu()
 
             if batch_idx == self.len_epoch:
@@ -134,7 +130,6 @@ class Trainer(BaseTrainer):
                     output = self.model(data)
                 
                 if output.size(0) != target.size(1):
-                    import pdb; pdb.set_trace
                     idx = []
                     for i in range(len(data)):
                         if data[i].size(1) == 0:
@@ -142,16 +137,23 @@ class Trainer(BaseTrainer):
                     target_numpy = target.clone().cpu()
                     target_numpy = np.delete(target_numpy, idx)
                     target = torch.tensor(target_numpy).to(DEVICE)
-                    import pdb; pdb.set_trace
 
                 loss = self.criterion(output, target)
 
                 self.writer.set_step((epoch - 1) * len(self.valid_data_loader) + batch_idx, 'valid')
                 self.valid_metrics.update('loss', loss.item())
                 for met in self.metric_ftns:
-                    self.valid_metrics.update(met.__name__, met(output, target.squeeze(0)))
+                    if met.__name__ == 'accuracy':
+                        self.valid_metrics.update(met.__name__, met(output, target.squeeze(0)))
                 #self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
-
+            """
+            for met in self.metric_ftns:
+                if met.__name__ != "accuracy":
+                    score = met(output, target.squeeze(0))
+                    for i in range(len(score)):
+                        print(met.__name__ + "_" + str(i) + ": " + str(score[i]))
+            """
+            
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():
             self.writer.add_histogram(name, p, bins='auto')

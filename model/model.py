@@ -25,15 +25,15 @@ def repackage_hidden(h):
 
 
 class ThreeEncoders(BaseModel):
-    def __init__(self, input_size, hidden, batch_size, num_layers, output_size, batch_first=False, bidirectional=False):
+    def __init__(self, input_size, hidden, batch_size, num_layers, output_size, batch_first=False, bidirectional=False, attention=True):
         super().__init__()
         self.batch_first = batch_first
         self.bidirectional = bidirectional
         self.batch_size = batch_size
         self.hidden = hidden
         self.num_classes = output_size
+        self.attention = attention
 
-        self.attention = True
         self.diction = load_embeddings().to(DEVICE)
         self.dict_size = len(self.diction)
         self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction).to(DEVICE)
@@ -63,10 +63,6 @@ class ThreeEncoders(BaseModel):
         self.context_output = torch.zeros(1, batch_size, self.hidden).to(DEVICE)
 
     def forward(self, utterances, speakers):
-        #if not hasattr(self, "context_hidden_state"):
-        #    self._init_hidden_state()
-
-        #import pdb; pdb.set_trace()
         outputs = None if self.attention else []
         if speakers.shape[0] == 1:
             speakers = speakers[0]
@@ -75,14 +71,11 @@ class ThreeEncoders(BaseModel):
             if speaker == 0:
                 inputt = torch.cat((self.context_output, output_emb), dim=1) #(B, S+1, 300)
                 output, self.speaker1_hidden_state = self.speaker1(inputt, self.speaker1_hidden_state)
-        #        self.speaker1_hidden_state = repackage_hidden(self.speaker1_hidden_state)
-
+  
                 self.context_output, self.context_hidden_state = self.context_encoder(
                                                                     self.speaker1_hidden_state,
                                                                     self.context_hidden_state)
-        #        self.context_hidden_state = repackage_hidden(self.context_hidden_state)
-                # context_output: (B, 1, 300), context_hidden_state: (1, B, 300)
-
+  
                 if self.attention:
                     output_a = self.word1(output)
                     output_a = self.context1(output_a)
@@ -93,11 +86,9 @@ class ThreeEncoders(BaseModel):
             else:
                 inputt = torch.cat((self.context_output, output_emb), dim=1)
                 output, self.speaker2_hidden_state = self.speaker2(inputt, self.speaker2_hidden_state)
-        #        self.speaker2_hidden_state= repackage_hidden(self.speaker2_hidden_state)
                 self.context_output, self.context_hidden_state = self.context_encoder(
                                                                     self.speaker2_hidden_state,
                                                                     self.context_hidden_state)
-        #        self.context_hidden_state = repackage_hidden(self.context_hidden_state)
 
                 if self.attention:
                     output_a = self.word2(output)
@@ -107,7 +98,6 @@ class ThreeEncoders(BaseModel):
 
                 output = self.linear2(output)
 
-            #import pdb; pdb.set_trace()
             if self.attention:
                 if outputs == None:
                     outputs = output
@@ -115,26 +105,29 @@ class ThreeEncoders(BaseModel):
                     outputs = torch.cat((outputs, output), dim=0)
             else:
                 outputs.append(output[0][-1])  # output: (B, S+1, classes
-
-        #self.speaker1_hidden_state = self.speaker1_hidden_state.detach()
-        #self.speaker2_hidden_state = self.speaker2_hidden_state.detach()
-        #self.context_hidden_state = self.context_hidden_state.detach()
         return outputs.to(DEVICE) if self.attention else torch.stack(outputs).to(DEVICE)
 
 
 class GRU(nn.Module):
-    def __init__(self, input_size, hidden, batch_size, num_layers,output_size, batch_first = True):
+    def __init__(self, input_size, hidden, batch_size, num_layers,output_size, batch_first = True, attention=True):
         super(GRU, self).__init__()
         self.num_layers = num_layers
         self.hidden = hidden
         self.batch_size = batch_size
+        self.attention = attention
 
         self.diction = load_embeddings()
         self.dict_size = len(self.diction)
         self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction)
         self.gru = nn.GRU(input_size=input_size, hidden_size=self.hidden, batch_first=bool(batch_first), bidirectional=False)
         self.output = nn.Linear(hidden, output_size)
+
+        if self.attention:
+            self.word = nn.Linear(hidden, hidden)
+            self.context = nn.Linear(hidden, 1, bias=False)
+            
         self._init_hidden_state()
+
 
     def _init_hidden_state(self, last_batch_size=None):
         if last_batch_size:
@@ -145,17 +138,25 @@ class GRU(nn.Module):
         
 
     def forward(self, input):
-        output = []
+        outputs = []
         try:
             for utterance in input:
                 if utterance.size(1) == 0:
                     continue
                 output_emb = self.lookup(utterance) # (B, S, 30
                 out, self.h_0 = self.gru(output_emb, self.h_0)
-                out = out[:, -1,:]
+
+                if self.attention:
+                    output = self.word(out)
+                    att_out = self.context(output)
+                    att_out = F.softmax(att_out, dim=1)
+                    out = (out * att_out).sum(1)
+                else:
+                    out = out[:, -1,:]
+
                 out = self.output(out)
-                output.append(out)
-            outputs = torch.stack(output, dim=0)
+                outputs.append(out)
+            final = torch.stack(outputs, dim=0)
         except:
             import pdb; pdb.set_trace()
-        return outputs.squeeze(1).to(DEVICE)
+        return final.squeeze(1).to(DEVICE)
