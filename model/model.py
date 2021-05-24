@@ -1,4 +1,4 @@
-import os, torch
+import os, torch, nltk
 import torch.nn as nn
 import torch.nn.functional as F
 from base import BaseModel
@@ -7,14 +7,6 @@ from slp.util.embeddings import EmbeddingsLoader
 from slp.helpers import PackSequence, PadPackedSequence
 from utils.attention_heatmaps import generate
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-
-def load_embeddings():
-    cwd = os.getcwd()
-    loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
-    word2idx, idx2word, embeddings = loader.load()
-    embeddings = torch.tensor(embeddings)
-    return embeddings.to(DEVICE)
 
 
 class ThreeEncoders(BaseModel):
@@ -27,7 +19,7 @@ class ThreeEncoders(BaseModel):
         self.num_classes = output_size
         self.attention = attention
 
-        self.diction = load_embeddings().to(DEVICE)
+        self.diction = self.load_embeddings().to(DEVICE)
         self.dict_size = len(self.diction)
         self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction).to(DEVICE)
 
@@ -45,6 +37,13 @@ class ThreeEncoders(BaseModel):
             self.word2 = nn.Linear(hidden, hidden)
             self.context2 = nn.Linear(hidden, 1, bias=False)
 
+    def load_embeddings(self):
+        cwd = os.getcwd()
+        loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
+        word2idx, self.idx2word, embeddings = loader.load()
+        embeddings = torch.tensor(embeddings)
+        return embeddings.to(DEVICE)
+
     def _init_hidden_state(self, last_batch_size=None):
         if last_batch_size:
             batch_size = last_batch_size
@@ -55,11 +54,13 @@ class ThreeEncoders(BaseModel):
         self.context_hidden_state = torch.zeros(batch_size, 1, self.hidden).to(DEVICE)
         self.context_output = torch.zeros(1, batch_size, self.hidden).to(DEVICE)
 
-    def forward(self, utterances, speakers):
+    def forward(self, utterances, speakers, heatmap=False):
         outputs = None if self.attention else []
+        i = 0
         if speakers.shape[0] == 1:
             speakers = speakers[0]
         for (utterance, speaker) in zip(utterances, speakers):
+            i += 1
             output_emb = self.lookup(utterance).to(DEVICE) # (B, S, 300)
             if speaker == 0:
                 inputt = torch.cat((self.context_output, output_emb), dim=1) #(B, S+1, 300)
@@ -70,10 +71,17 @@ class ThreeEncoders(BaseModel):
                                                                     self.context_hidden_state)
   
                 if self.attention:
-                    output_a = self.word1(output)
-                    output_a = self.context1(output_a)
-                    output_a = F.softmax(output_a,dim=1)
-                    output = (output * output_a).sum(1)
+                    output_att = self.word1(output)
+                    output_att = self.context1(output_att)
+                    output_att = F.softmax(output_att,dim=1)
+                    output = (output * output_att).sum(1)
+                    if heatmap:
+                        import pdb; pdb.set_trace()
+                        words_list = [self.idx2word[w.item()] for w in utterance[0]]
+                        words_list.insert(0, '[context]')
+                        att_rescaled = output_att * 100
+                        attention_list = (att_rescaled.squeeze(2).squeeze(0).detach().cpu()).tolist()
+                        generate(words_list, attention_list, 'results_heatmap'+str(i)+'.tex')
 
                 output = self.linear1(output)
             else:
@@ -84,10 +92,17 @@ class ThreeEncoders(BaseModel):
                                                                     self.context_hidden_state)
 
                 if self.attention:
-                    output_a = self.word2(output)
-                    output_a = self.context2(output_a)
-                    output_a = F.softmax(output_a,dim=1)
-                    output = (output * output_a).sum(1)
+                    output_att = self.word2(output)
+                    output_att = self.context2(output_att)
+                    output_att = F.softmax(output_att,dim=1)
+                    output = (output * output_att).sum(1)
+                    if heatmap:
+                        import pdb; pdb.set_trace()
+                        words_list = [self.idx2word[w.item()] for w in utterance[0]]
+                        words_list.insert(0, '[context]')
+                        att_rescaled = output_att * 100
+                        attention_list = (att_rescaled.squeeze(2).squeeze(0).detach().cpu()).tolist()
+                        generate(words_list, attention_list, 'results_heatmap'+str(i)+'.tex')
 
                 output = self.linear2(output)
 
@@ -114,7 +129,8 @@ class GRU(nn.Module):
         self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction)
         self.gru = nn.GRU(input_size=input_size, hidden_size=self.hidden, batch_first=bool(batch_first), bidirectional=False)
         self.output = nn.Linear(hidden, output_size)
-
+        self.pos_tags = []
+        
         if self.attention:
             self.word = nn.Linear(hidden, hidden)
             self.context = nn.Linear(hidden, 1, bias=False)
@@ -138,8 +154,8 @@ class GRU(nn.Module):
 
 
 
-    def forward(self, input, heatmap=False):
-        outputs = []
+    def forward(self, input, heatmap=False, postags=False):
+        outputs = []; i=0
         try:
             for utterance in input:
                 if utterance.size(1) == 0:
@@ -147,18 +163,22 @@ class GRU(nn.Module):
                 output_emb = self.lookup(utterance) # (B, S, 30
                 out, self.h_0 = self.gru(output_emb, self.h_0)
 
-                
+                i += 1
                 if self.attention:
                     output = self.word(out)
                     att_out = self.context(output)
                     att_out = F.softmax(att_out, dim=1)
-                    heatmap=True
+
+                    if postags:
+                        # keep pos tag of the highest-ranked word
+                        higher_weight = torch.argmax(att_out.squeeze(2).squeeze(0)).item()
+                        higher_word = self.idx2word[utterance[0][higher_weight].item()]
+                        self.pos_tags.append(nltk.pos_tag([higher_word])[0][1])
                     if heatmap:
-                        import pdb; pdb.set_trace()
                         words_list = [self.idx2word[w.item()] for w in utterance[0]]
                         att_rescaled = att_out * 100
-                        attention_list = (att_rescaled.squeeze().detach().cpu()).tolist()
-                        generate(words_list, attention_list, 'results_heatmap.tex')
+                        attention_list = (att_rescaled.squeeze(2).squeeze(0).detach().cpu()).tolist()
+                        generate(words_list, attention_list, 'results_heatmap'+str(i)+'.tex')
                     out = (out * att_out).sum(1)
                 else:
                     out = out[:, -1,:]

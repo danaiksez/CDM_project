@@ -1,5 +1,5 @@
 import numpy as np
-import torch
+import torch, json
 import torch.nn.functional as F
 
 from torchvision.utils import make_grid
@@ -60,6 +60,7 @@ class Trainer(BaseTrainer):
         self.model.to(DEVICE)
         self.model.train()
         self.train_metrics.reset()
+        self.model.pos_tags = []
 
         #for batch_idx, (data, lengths, target, sentences_number) in enumerate(self.train_data_loader):
         for batch_idx, (data, target, actions, speakers) in enumerate(self.train_data_loader):
@@ -69,9 +70,9 @@ class Trainer(BaseTrainer):
             self.model._init_hidden_state()
 
             if 'ThreeEncoders' in self.threeEncoders:
-                output = self.model(data, speakers)
+                output = self.model(data, speakers, heatmap=False)
             else:
-                output = self.model(data)
+                output = self.model(data, heatmap=False, postags=True)
             
             if output.size(0) != target.size(1):
                 idx = []
@@ -86,7 +87,6 @@ class Trainer(BaseTrainer):
             loss.backward()
             self.optimizer.step()
 
-            #import pdb; pdb.set_trace()
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
             for met in self.metric_ftns:
@@ -117,6 +117,13 @@ class Trainer(BaseTrainer):
 
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
+
+        #import pdb; pdb.set_trace()
+        try:
+            with open('pos_tags.json', 'w') as _file: 
+                json.dump(self.model.pos_tags, _file, indent=6)
+        except:
+            import pdb; pdb.set_trace()
         return log
 
     def _valid_epoch(self, epoch):
