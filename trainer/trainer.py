@@ -1,11 +1,24 @@
 import numpy as np
 import torch
+import torch.nn.functional as F
+
 from torchvision.utils import make_grid
 from base import BaseTrainer
 from utils import inf_loop, MetricTracker
+from sklearn.metrics import precision_recall_fscore_support
 
 torch.autograd.set_detect_anomaly(True)
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
+def compute_prec_rec_f1(output, target):
+    with torch.no_grad():
+        pred = F.softmax(output, dim=1)
+        pred = torch.argmax(pred, dim=1)
+        pred = pred.clone().cpu().numpy()
+        labs = target.clone().cpu().numpy()
+        prec, rec, f1, _ = precision_recall_fscore_support(labs, pred, labels=[0,1,2,3,4,5,6], zero_division=0)
+    return prec, rec, f1
 
 
 class Trainer(BaseTrainer):
@@ -70,17 +83,22 @@ class Trainer(BaseTrainer):
                 target = torch.tensor(target_numpy).to(DEVICE)
 
             loss = self.criterion(output, target)
-            #loss.backward(retain_graph=True)
             loss.backward()
             self.optimizer.step()
 
             #import pdb; pdb.set_trace()
-
             self.writer.set_step((epoch - 1) * self.len_epoch + batch_idx)
             self.train_metrics.update('loss', loss.item())
             for met in self.metric_ftns:
                 if met.__name__ == 'accuracy':
                     self.train_metrics.update(met.__name__, met(output, target.squeeze(0)))
+                else:
+                    classid = int(met.__name__[-1])  # id of the class (number)
+                    pred = torch.argmax(F.softmax(output, dim=1), dim=1)
+                    if classid in pred:     # update metric score only if class is present in the targets
+                        scores = compute_prec_rec_f1(output, target.squeeze(0))
+                        self.train_metrics.update(met.__name__, met(scores))
+
 
             #if batch_idx % self.log_step == 0:
             if batch_idx % 100 == 0:
@@ -88,15 +106,6 @@ class Trainer(BaseTrainer):
                     epoch,
                     self._progress(batch_idx),
                     loss.item()))
-
-                """
-                for met in self.metric_ftns:
-                    if met.__name__ != "accuracy":
-                        score = met(output, target.squeeze(0))
-                        for i in range(len(score)):
-                            print(met.__name__ + "_" + str(i) + ": " + str(score[i]))
-                """
-                #self.writer.add_image('input', make_grid(data, nrow=8, normalize=True)) #corrected data.cpu()
 
             if batch_idx == self.len_epoch:
                 break
@@ -145,14 +154,13 @@ class Trainer(BaseTrainer):
                 for met in self.metric_ftns:
                     if met.__name__ == 'accuracy':
                         self.valid_metrics.update(met.__name__, met(output, target.squeeze(0)))
-                #self.writer.add_image('input', make_grid(data.cpu(), nrow=8, normalize=True))
-            """
-            for met in self.metric_ftns:
-                if met.__name__ != "accuracy":
-                    score = met(output, target.squeeze(0))
-                    for i in range(len(score)):
-                        print(met.__name__ + "_" + str(i) + ": " + str(score[i]))
-            """
+                    else:
+                        classid = int(met.__name__[-1])  # id of the class (number)
+                        pred = torch.argmax(F.softmax(output, dim=1), dim=1)
+                        if classid in pred:     # update metric score only if class is present in the targets
+                            scores = compute_prec_rec_f1(output, target.squeeze(0))
+                            self.valid_metrics.update(met.__name__, met(scores))
+
             
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():

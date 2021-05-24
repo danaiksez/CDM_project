@@ -57,7 +57,10 @@
     },
     "loss": "CrossEntropy_loss",
     "metrics": [
-        "accuracy", "precision"
+        "accuracy", 
+        "precision_0", "precision_1", "precision_2", "precision_3", "precision_4" , "precision_5" , "precision_6",
+        "recall_0" , "recall_1" , "recall_2" , "recall_3" , "recall_4" , "recall_5" ,"recall_6" ,
+        "f1_0", "f1_1", "f1_2", "f1_3", "f1_4", "f1_5", "f1_6" 
     ],
     "lr_scheduler": {
         "type": "StepLR",

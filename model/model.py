@@ -5,7 +5,7 @@ from base import BaseModel
 
 from slp.util.embeddings import EmbeddingsLoader
 from slp.helpers import PackSequence, PadPackedSequence
-
+from utils.attention_heatmaps import generate
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
@@ -15,13 +15,6 @@ def load_embeddings():
     word2idx, idx2word, embeddings = loader.load()
     embeddings = torch.tensor(embeddings)
     return embeddings.to(DEVICE)
-
-def repackage_hidden(h):
-    """Wraps hidden states in new Tensors, to detach them from their history."""
-    if isinstance(h, torch.Tensor):
-        return h.detach()
-    else:
-        return tuple(repackage_hidden(v) for v in h)
 
 
 class ThreeEncoders(BaseModel):
@@ -116,7 +109,7 @@ class GRU(nn.Module):
         self.batch_size = batch_size
         self.attention = attention
 
-        self.diction = load_embeddings()
+        self.diction = self.load_embeddings()
         self.dict_size = len(self.diction)
         self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction)
         self.gru = nn.GRU(input_size=input_size, hidden_size=self.hidden, batch_first=bool(batch_first), bidirectional=False)
@@ -136,8 +129,16 @@ class GRU(nn.Module):
             batch_size = self.batch_size
         self.h_0 = torch.zeros(1, batch_size, self.hidden).to(DEVICE)  # changed order
         
+    def load_embeddings(self):
+        cwd = os.getcwd()
+        loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
+        word2idx, self.idx2word, embeddings = loader.load()
+        embeddings = torch.tensor(embeddings)
+        return embeddings.to(DEVICE)
 
-    def forward(self, input):
+
+
+    def forward(self, input, heatmap=False):
         outputs = []
         try:
             for utterance in input:
@@ -146,10 +147,18 @@ class GRU(nn.Module):
                 output_emb = self.lookup(utterance) # (B, S, 30
                 out, self.h_0 = self.gru(output_emb, self.h_0)
 
+                
                 if self.attention:
                     output = self.word(out)
                     att_out = self.context(output)
                     att_out = F.softmax(att_out, dim=1)
+                    heatmap=True
+                    if heatmap:
+                        import pdb; pdb.set_trace()
+                        words_list = [self.idx2word[w.item()] for w in utterance[0]]
+                        att_rescaled = att_out * 100
+                        attention_list = (att_rescaled.squeeze().detach().cpu()).tolist()
+                        generate(words_list, attention_list, 'results_heatmap.tex')
                     out = (out * att_out).sum(1)
                 else:
                     out = out[:, -1,:]

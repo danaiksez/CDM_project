@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-from sklearn.metrics import precision_recall_fscore_support
 
 
 def accuracy(output, target):
@@ -12,14 +11,52 @@ def accuracy(output, target):
         correct += torch.sum(pred == target).item()
     return correct / len(target)
 
-def precision(output, target):
-    with torch.no_grad():
-        pred = F.softmax(output, dim=1)
-        pred = torch.argmax(pred, dim=1)
-        pred = pred.clone().cpu().numpy()
-        labs = target.clone().cpu().numpy()
-        prec, _, _, _ = precision_recall_fscore_support(labs, pred, labels=[0,1,2,3,4,5,6])
-    return prec
+
+def precision_0(score):
+    return score[0][0]
+def precision_1(score):
+    return score[0][1]
+def precision_2(score):
+    return score[0][2]
+def precision_3(score):
+    return score[0][3]
+def precision_4(score):
+    return score[0][4]
+def precision_5(score):
+    return score[0][5]
+def precision_6(score):
+    return score[0][6]
+
+def recall_0(score):
+    return score[1][0]
+def recall_1(score):
+    return score[1][1]
+def recall_2(score):
+    return score[1][2]
+def recall_3(score):
+    return score[1][3]
+def recall_4(score):
+    return score[1][4]
+def recall_5(score):
+    return score[1][5]
+def recall_6(score):
+    return score[1][6]
+
+def f1_0(score):
+    return score[2][0]
+def f1_1(score):
+    return score[2][1]
+def f1_2(score):
+    return score[2][2]
+def f1_3(score):
+    return score[2][3]
+def f1_4(score):
+    return score[2][4]
+def f1_5(score):
+    return score[2][5]
+def f1_6(score):
+    return score[2][6]
+
 
 
 def top_k_acc(output, target, k=3):
