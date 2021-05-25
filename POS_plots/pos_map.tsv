@@ -1,0 +1,50 @@
+POS	explanation
+$	dollar
+’’	"closing quotation mark
+"
+ (	"opening parenthesis
+"
+)	closing parenthesis
+","	comma
+--	dash
+.	sentence terminator
+:	colon or ellipsis
+CC	coordinating  conjunction
+CD	"numeral, cardinal"
+DT	determiner
+EX	existential there
+FW	foreign word
+IN	preposition or conjunction
+JJ	adjective
+JJR	comparative adjective
+JJS	superlative  adjective
+LS	list item marker
+MD	modal auxiliary
+NN	common noun
+NNP	proper noun
+NNPS	plural proper noun
+NNS	plural common noun
+PDT	pre-determiner
+POS	genitive marker
+PRP	personal pronoun
+PRP$	possessive pronoun
+RB	adverb
+RBR	comparative adverb
+RBS	superlative adverb
+RP	particle
+SYM	symbol
+TO	infinitive „to“
+UH	interjection
+VB	base verb
+VBD	past tense verb
+VBG	present participle verb
+"VBN
+"	past participle verb
+VBP	present tense verb
+"VBZ
+"	present tense 3rd person singular verb
+WDT	WH-determiner
+WP	WH-pronoun
+WP$	possessive WH-pronoun
+WRB	Wh-adverb
+``	opening quotation mark
