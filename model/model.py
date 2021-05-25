@@ -9,6 +9,15 @@ from utils.attention_heatmaps import generate
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
+def repackage_hidden(h):
+    """Wraps hidden states in new Tensors, to detach them from their history."""
+
+    if isinstance(h, torch.Tensor):
+        return h.detach()
+    else:
+        return tuple(repackage_hidden(v) for v in h)
+
+
 class ThreeEncoders(BaseModel):
     def __init__(self, input_size, hidden, batch_size, num_layers, output_size, batch_first=False, bidirectional=False, attention=True):
         super().__init__()
@@ -70,7 +79,6 @@ class ThreeEncoders(BaseModel):
                 self.context_output, self.context_hidden_state = self.context_encoder(
                                                                     self.speaker1_hidden_state,
                                                                     self.context_hidden_state)
-  
                 if self.attention:
                     output_att = self.word1(output)
                     output_att = self.context1(output_att)
@@ -167,7 +175,7 @@ class GRU(nn.Module):
         loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
         word2idx, self.idx2word, embeddings = loader.load()
         embeddings = torch.tensor(embeddings)
-        return embeddings.to(DEVICE)
+        return embeddings.to(DEVICE) 
 
 
 
@@ -185,7 +193,8 @@ class GRU(nn.Module):
                     output = self.word(out)
                     att_out = self.context(output)
                     att_out = F.softmax(att_out, dim=1)
-
+                    out = (out * att_out).sum(1)
+                    """
                     if postags:
                         # keep pos tag of the highest-ranked word
                         higher_weight = torch.argmax(att_out.squeeze(2).squeeze(0)).item()
@@ -196,7 +205,7 @@ class GRU(nn.Module):
                         att_rescaled = att_out * 100
                         attention_list = (att_rescaled.squeeze(2).squeeze(0).detach().cpu()).tolist()
                         generate(words_list, attention_list, 'results_heatmap'+str(i)+'.tex')
-                    out = (out * att_out).sum(1)
+                    """
                 else:
                     out = out[:, -1,:]
 
@@ -206,3 +215,118 @@ class GRU(nn.Module):
         except:
             import pdb; pdb.set_trace()
         return final.squeeze(1).to(DEVICE)
+
+
+class WordAttNet(nn.Module):
+    def __init__(self, hidden_size=300):
+        super(WordAttNet, self).__init__()
+
+        self.gru = nn.GRU(300, 300, bidirectional = False, batch_first=True)
+        self.word = nn.Linear(hidden_size, hidden_size)
+        self.context = nn.Linear(hidden_size, 1, bias=False)
+       
+        self.diction = self.load_embeddings()
+        self.dict_size = len(self.diction)
+        self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction)
+        
+    def load_embeddings(self):
+        cwd = os.getcwd()
+        loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
+        word2idx, self.idx2word, embeddings = loader.load()
+        embeddings = torch.tensor(embeddings)
+        return embeddings.to(DEVICE) 
+
+    def forward(self, inputs, hidden_state):
+        #import pdb; pdb.set_trace()
+        output_emb = self.lookup(inputs)
+        f_output, h_output = self.gru(output_emb.float(), hidden_state)
+        
+        output = self.word(f_output)
+        output = self.context(output)
+        output = F.softmax(output, dim=1)
+
+        output = (f_output * output).sum(1)
+        return output, h_output
+
+
+class SentAttNet(nn.Module):
+    def __init__(self, hidden_size=300, num_classes=0):
+        super(SentAttNet, self).__init__()
+        num_classes = num_classes
+        self.gru = nn.GRU(hidden_size, 300, bidirectional=False, batch_first=True) #changed hidden size
+        self.sent = nn.Linear(hidden_size, hidden_size)
+        self.context = nn.Linear(hidden_size, 1, bias=False)
+        self.fc = nn.Linear(hidden_size, num_classes)
+        
+
+    def forward(self, inputs, hidden_state):
+        #import pdb; pdb.set_trace()
+        outputs = []
+        for sentence in inputs:
+            f_output, h_output = self.gru(sentence.unsqueeze(0), hidden_state)
+        
+            output = self.sent(f_output)
+            output = self.context(output)
+            output = F.softmax(output, dim=1)
+            output = (f_output * output).sum(1)
+            output = self.fc(output).squeeze()
+            outputs.append(output.unsqueeze(0))
+        #import pdb; pdb.set_trace()
+        outputs = torch.stack(outputs,dim=1)
+        return outputs.squeeze(0), h_output
+
+
+class HierAttNet(nn.Module):
+    def __init__(self, hidden_size, batch_size, num_classes):
+        super (HierAttNet, self).__init__()
+
+        self.num_classes = num_classes
+        self.batch_size = batch_size
+        self.hidden_size = hidden_size
+        
+        self.sent_att_net = SentAttNet(self.hidden_size, num_classes)
+        self.word_att_net_text = WordAttNet(self.hidden_size)
+
+        self._init_hidden_state()
+
+    def _init_hidden_state(self, last_batch_size=None):
+        if last_batch_size:
+            batch_size = last_batch_size
+        else:
+            batch_size = self.batch_size
+        self.word_hidden_state = torch.zeros(1, batch_size, self.hidden_size).to(DEVICE)
+        self.sent_hidden_state = torch.zeros(1, batch_size, self.hidden_size).to(DEVICE)
+
+
+    def forward(self, inputs):
+        # inputs = (B, S, W)
+        #import pdb; pdb.set_trace()
+        output_list_text = []
+
+        for i in inputs:
+            if i.size(1) == 0:
+                continue
+            output_text, self.word_hidden_state = self.word_att_net_text(i, self.word_hidden_state) #[8,600]
+            output_list_text.append(output_text)
+#            import pdb; pdb.set_trace()
+            self.word_hidden_state = repackage_hidden(self.word_hidden_state)
+        
+        # output_list_text = (S, B, 300)
+        output, self.sent_hidden_state = self.sent_att_net(output_list_text, self.sent_hidden_state)
+        self.sent_hidden_state = repackage_hidden(self.sent_hidden_state)
+        return output
+
+
+"""
+ "arch": {
+        "type": "HierAttNer",
+        "args": {
+            "input_size": 300,
+            "hidden": 300,
+            "batch_size": 1,
+            "num_layers": 1,
+            "output_size": 7,
+            "batch_first": "True",
+            "attention": "False"
+        }
+"""

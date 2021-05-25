@@ -1,6 +1,7 @@
 import numpy as np
 import torch, json
 import torch.nn.functional as F
+import torch.nn as nn
 
 from torchvision.utils import make_grid
 from base import BaseTrainer
@@ -71,9 +72,11 @@ class Trainer(BaseTrainer):
 
             if 'ThreeEncoders' in self.threeEncoders:
                 output = self.model(data, speakers, heatmap=False, postags=True)
+            elif 'GRU' in self.threeEncoders:
+                output = self.model(data, heatmap=False, postags=False)
             else:
-                output = self.model(data, heatmap=False, postags=True)
-            
+                output = self.model(data)
+
             if output.size(0) != target.size(1):
                 idx = []
                 for i in range(len(data)):
@@ -101,7 +104,7 @@ class Trainer(BaseTrainer):
 
 
             #if batch_idx % self.log_step == 0:
-            if batch_idx % 1000 == 0:
+            if batch_idx % 100 == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
                     epoch,
                     self._progress(batch_idx),
@@ -183,3 +186,4 @@ class Trainer(BaseTrainer):
             current = batch_idx
             total = self.len_epoch
         return base.format(current, total, 100.0 * current / total)
+
