@@ -22,6 +22,7 @@ class ThreeEncoders(BaseModel):
         self.diction = self.load_embeddings().to(DEVICE)
         self.dict_size = len(self.diction)
         self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction).to(DEVICE)
+        self.pos_tags = []
 
         self.speaker1 = nn.GRU(input_size=input_size, hidden_size=hidden, batch_first=True, bidirectional=False)
         self.speaker2 = nn.GRU(input_size=input_size, hidden_size=hidden, batch_first=True, bidirectional=False)
@@ -54,7 +55,7 @@ class ThreeEncoders(BaseModel):
         self.context_hidden_state = torch.zeros(batch_size, 1, self.hidden).to(DEVICE)
         self.context_output = torch.zeros(1, batch_size, self.hidden).to(DEVICE)
 
-    def forward(self, utterances, speakers, heatmap=False):
+    def forward(self, utterances, speakers, heatmap=False, postags=False):
         outputs = None if self.attention else []
         i = 0
         if speakers.shape[0] == 1:
@@ -75,6 +76,14 @@ class ThreeEncoders(BaseModel):
                     output_att = self.context1(output_att)
                     output_att = F.softmax(output_att,dim=1)
                     output = (output * output_att).sum(1)
+                    if postags:
+                        # keep pos tag of the highest-ranked word
+                        higher_weight = torch.argmax(output_att.squeeze(2).squeeze(0)).item()
+                        if higher_weight == 0:
+                            higher_word = '[context]'
+                        else:
+                            higher_word = self.idx2word[utterance[0][higher_weight-1].item()]
+                        self.pos_tags.append(nltk.pos_tag([higher_word])[0][1])
                     if heatmap:
                         import pdb; pdb.set_trace()
                         words_list = [self.idx2word[w.item()] for w in utterance[0]]
@@ -96,8 +105,16 @@ class ThreeEncoders(BaseModel):
                     output_att = self.context2(output_att)
                     output_att = F.softmax(output_att,dim=1)
                     output = (output * output_att).sum(1)
+                    if postags:
+                        # keep pos tag of the highest-ranked word
+                        higher_weight = torch.argmax(output_att.squeeze(2).squeeze(0)).item()
+                        if higher_weight == 0:
+                            higher_word = '[context]'
+                        else:
+                            higher_word = self.idx2word[utterance[0][higher_weight-1].item()]
+                        self.pos_tags.append(nltk.pos_tag([higher_word])[0][1])
                     if heatmap:
-                        import pdb; pdb.set_trace()
+                        #import pdb; pdb.set_trace()
                         words_list = [self.idx2word[w.item()] for w in utterance[0]]
                         words_list.insert(0, '[context]')
                         att_rescaled = output_att * 100

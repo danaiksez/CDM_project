@@ -3,7 +3,7 @@
     "n_gpu": 0,
 
     "arch": {
-        "type": "GRU",
+        "type": "ThreeEncoders",
         "args": {
             "input_size": 300,
             "hidden": 300,

@@ -70,7 +70,7 @@ class Trainer(BaseTrainer):
             self.model._init_hidden_state()
 
             if 'ThreeEncoders' in self.threeEncoders:
-                output = self.model(data, speakers, heatmap=False)
+                output = self.model(data, speakers, heatmap=False, postags=True)
             else:
                 output = self.model(data, heatmap=False, postags=True)
             
@@ -101,7 +101,7 @@ class Trainer(BaseTrainer):
 
 
             #if batch_idx % self.log_step == 0:
-            if batch_idx % 100 == 0:
+            if batch_idx % 1000 == 0:
                 self.logger.debug('Train Epoch: {} {} Loss: {:.6f}'.format(
                     epoch,
                     self._progress(batch_idx),
