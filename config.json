@@ -3,11 +3,14 @@
     "n_gpu": 0,
 
     "arch": {
-        "type": "HierAttNet",
+        "type": "ThreeEncoders",
         "args": {
-            "hidden_size": 300,
+            "input_size": 300,
+            "hidden": 300,
             "batch_size": 1,
-            "num_classes": 7
+            "num_layers": 1,
+            "output_size": 7,
+            "batch_first": "True"
         }
     },
     "train_data_loader": {

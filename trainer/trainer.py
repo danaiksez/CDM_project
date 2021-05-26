@@ -71,6 +71,7 @@ class Trainer(BaseTrainer):
             self.model._init_hidden_state()
 
             if 'ThreeEncoders' in self.threeEncoders:
+                #import pdb; pdb.set_trace()
                 output = self.model(data, speakers, heatmap=False, postags=True)
             elif 'GRU' in self.threeEncoders:
                 output = self.model(data, heatmap=False, postags=False)

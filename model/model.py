@@ -19,14 +19,14 @@ def repackage_hidden(h):
 
 
 class ThreeEncoders(BaseModel):
-    def __init__(self, input_size, hidden, batch_size, num_layers, output_size, batch_first=False, bidirectional=False, attention=True):
+    def __init__(self, input_size, hidden, batch_size, num_layers, output_size, batch_first=False, bidirectional=False):
         super().__init__()
         self.batch_first = batch_first
         self.bidirectional = bidirectional
         self.batch_size = batch_size
         self.hidden = hidden
         self.num_classes = output_size
-        self.attention = attention
+        self.attention = False
 
         self.diction = self.load_embeddings().to(DEVICE)
         self.dict_size = len(self.diction)
@@ -142,12 +142,12 @@ class ThreeEncoders(BaseModel):
 
 
 class GRU(nn.Module):
-    def __init__(self, input_size, hidden, batch_size, num_layers,output_size, batch_first = True, attention=True):
+    def __init__(self, input_size, hidden, batch_size, num_layers,output_size, batch_first = True):
         super(GRU, self).__init__()
         self.num_layers = num_layers
         self.hidden = hidden
         self.batch_size = batch_size
-        self.attention = attention
+        self.attention = False
 
         self.diction = self.load_embeddings()
         self.dict_size = len(self.diction)
@@ -178,7 +178,6 @@ class GRU(nn.Module):
         return embeddings.to(DEVICE) 
 
 
-
     def forward(self, input, heatmap=False, postags=False):
         outputs = []; i=0
         try:
@@ -189,6 +188,7 @@ class GRU(nn.Module):
                 out, self.h_0 = self.gru(output_emb, self.h_0)
 
                 i += 1
+                import pdb; pdb.set_trace()
                 if self.attention:
                     output = self.word(out)
                     att_out = self.context(output)
@@ -329,4 +329,12 @@ class HierAttNet(nn.Module):
             "batch_first": "True",
             "attention": "False"
         }
+        "arch": {
+        "type": "HierAttNet",
+        "args": {
+            "hidden_size": 300,
+            "batch_size": 1,
+            "num_classes": 7
+        }
+    },
 """
