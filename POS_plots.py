@@ -32,7 +32,7 @@ for i, ax in enumerate(axs.flatten()):
     ax.set_ylabel('Count')
     ax.set_title(model_names[i])
 
-plt.suptitle('10 most frequent Words per Model')   
+plt.suptitle('10 most frequent Word Classes per Model')   
 plt.tight_layout()
 plt.savefig('./POS_frequency_per_model.pdf')
 plt.savefig('./POS_frequency_per_model.png')
@@ -45,12 +45,12 @@ three_enc_top10['model'] = 'Three Encoders'
 
 both = pd.concat([baseline_top10, three_enc_top10])
 
-plot = sns.barplot(data = both, x = 'POS', y = 'frequency', hue = 'model')
+plot = sns.barplot(data = both, x = 'POS', y = 'frequency', hue = 'model', palette = 'magma')
 label_tags = [label.get_text() for label in plot.get_xticklabels()]
 plot.set_xticklabels(pos_label_map.loc[label_tags]['explanation'], rotation = 45, ha="right")
 plot.set_xlabel('Part of Speech')
 plot.set_ylabel('Count')
-plot.set_title('10 most frequent Words per Model')
+plot.set_title('10 most frequent Word Classes per Model')
 
 plt.tight_layout()
 plt.savefig('./POS_frequency_both_models.pdf')
@@ -84,7 +84,7 @@ label_tags = [label.get_text() for label in diff_plot.get_xticklabels()]
 diff_plot.set_xticklabels(pos_label_map.loc[label_tags]['explanation'], rotation = 45, ha="right")
 diff_plot.set_xlabel('Part of Speech')
 diff_plot.set_ylabel('Absolute Difference Between Models')
-diff_plot.set_title('10 highest Differences in Word Frequencies between Models')
+diff_plot.set_title('10 highest Differences in Word Class Frequencies between Models')
 plt.tight_layout()
 plt.savefig('./POS_frequency_difference.pdf')
 plt.savefig('./POS_frequency_difference.png')
