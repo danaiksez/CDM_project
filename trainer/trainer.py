@@ -27,7 +27,7 @@ class Trainer(BaseTrainer):
     Trainer class
     """
     def __init__(self, model, criterion, metric_ftns, optimizer, config, device,
-                 train_data_loader, valid_data_loader=None, test_data_loader=None, 
+                 train_data_loader, valid_data_loader=None, test_data_loader=None,
                  lr_scheduler=None, len_epoch=None, threeEncoders='none'):
         super().__init__(model, criterion, metric_ftns, optimizer, config)
         self.config = config
@@ -79,13 +79,19 @@ class Trainer(BaseTrainer):
                 output = self.model(data)
 
             if output.size(0) != target.size(1):
-                idx = []
-                for i in range(len(data)):
-                    if data[i].size(1) == 0:
-                        idx.append(i)
-                target_numpy = target.clone().cpu()
-                target_numpy = np.delete(target_numpy, idx)
-                target = torch.tensor(target_numpy).to(DEVICE)
+                if output.size(0) < target.size(1):
+                    idx = []
+                    print('hoe vaak')
+                    print(output.size(0), target.size(1))
+                    for i in range(len(data)):
+                        if data[i].size(1) == 0:
+                            idx.append(i)
+                    target_numpy = target.clone().cpu()
+                    target_numpy = np.delete(target_numpy, idx)
+                    target = torch.tensor(target_numpy).to(DEVICE)
+                    print("newtarget",target)
+                elif output.size(0) > target.size(1):
+                    output = output[:target.size(1)]
 
             loss = self.criterion(output, target)
             loss.backward()
@@ -124,7 +130,7 @@ class Trainer(BaseTrainer):
 
         #import pdb; pdb.set_trace()
         try:
-            with open('pos_tags.json', 'w') as _file: 
+            with open('pos_tags.json', 'w') as _file:
                 json.dump(self.model.pos_tags, _file, indent=6)
         except:
             import pdb; pdb.set_trace()
@@ -148,7 +154,7 @@ class Trainer(BaseTrainer):
                     output = self.model(data, spkrs)
                 else:
                     output = self.model(data)
-                
+
                 if output.size(0) != target.size(1):
                     idx = []
                     for i in range(len(data)):
@@ -172,7 +178,7 @@ class Trainer(BaseTrainer):
                             scores = compute_prec_rec_f1(output, target.squeeze(0))
                             self.valid_metrics.update(met.__name__, met(scores))
 
-            
+
         # add histogram of model parameters to the tensorboard
         for name, p in self.model.named_parameters():
             self.writer.add_histogram(name, p, bins='auto')
@@ -187,4 +193,3 @@ class Trainer(BaseTrainer):
             current = batch_idx
             total = self.len_epoch
         return base.format(current, total, 100.0 * current / total)
-

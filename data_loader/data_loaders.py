@@ -1,7 +1,7 @@
 #from torchvision import datasets, transforms
 from base import BaseDataLoader
 
-
+import matplotlib.pyplot as plt
 #adapted from https://github.com/Sanghoon94/DailyDialogue-Parser/blob/master/parser.py
 #from base.base_data_loader import BaseDataLoader
 import os, sys, torch, re
@@ -16,6 +16,7 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence as pad_sequence_torch
 
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+# DEVICE = 'cpu'
 
 
 def pad_sequence(sequences, batch_first=False, padding_len=None, padding_value=0):
@@ -48,7 +49,7 @@ def pad_sequence(sequences, batch_first=False, padding_len=None, padding_value=0
 def remove_punctuation(txt):
     ch = "[.?:_'!,)(]"
     txt = re.sub(ch, '', txt)
-    return txt 
+    return txt
 
 class DailyDialogue(Dataset):
     def __init__(self, input_dir, split='train', text_transforms=None):
@@ -57,16 +58,60 @@ class DailyDialogue(Dataset):
         self.text_transforms = text_transforms
         self.sequences, self.emotions, self.actions, self.speakers = self.parse_data(self.input_dir, self.split)
         self.preprocessed = [self.preprocess(i) for i in range(len(self.sequences))]
-
+        self.emotion_dataset = [self.emotion_dataset(i) for i in range(len(self.preprocessed))]
     def __len__(self):
         return len(self.emotions)
 
+    def retrieve_str_label(self,labels):
+        label_s = []
+        for label in labels:
+            if label == 0:
+                label_s.append('no_emotion')
+            elif label  == 1:
+                label_s.append('anger')
+            elif label  == 2:
+                label_s.append('disgust')
+            elif label  == 3:
+                label_s.append('fear')
+            elif label == 4:
+                label_s.append('happiness')
+            elif label  == 5:
+                label_s.append('sadness')
+            elif label == 6:
+                label_s.append('surprise')
+        return label_s
+
+    def retrieve_emotions(self, dialogue):
+        no_emotion = []
+        anger = []
+        disgust = []
+        fear = []
+        happiness = []
+        sadness = []
+        surprise = []
+        for seqs in range(len(dialogue)):
+            for seq in range(len(seqs)) :
+                if label == 0:
+                    no_emotion.append((dailogue[seqs][seq], self.speakers[seqs][seq], self.sequences[seqs][seq], self.retrieve_str_label(self.emotions[seqs][seq])))
+                elif label  == 1:
+                    langer.append(seq)
+                elif label  == 2:
+                    disgust.append(seq)
+                elif label  == 3:
+                    fear.append(seq)
+                elif label == 4:
+                    happiness.append(seq)
+                elif label  == 5:
+                    sadness.append(seq)
+                elif label == 6:
+                    surprise.append(seq)
+            return no_emotion,anger,disgust,fear,happiness,sadness,surprise
     def preprocess(self, idx):
         sequences = self.sequences[idx]
         emotions = self.emotions[idx]
         actions = self.actions[idx]
         speakers = self.speakers[idx]
-        
+
         segments = []
         if self.text_transforms is not None:
             for seq in sequences:
@@ -75,7 +120,41 @@ class DailyDialogue(Dataset):
         #sequences = pad_sequence(segments, batch_first=True, padding_len=100)
         #emotions = torch.tensor(emotions)
             sequences = segments
-        return sequences, emotions, actions, speakers
+        labels = self.retrieve_str_label(self.emotions[idx])
+        seqs = []
+         # ['no emotion','anger','disgust','fear','happiness','sadness','surprise']
+        for seq in self.sequences[idx]:
+            seqs.append(remove_punctuation(seq))
+        return sequences, emotions, actions, speakers,seqs, labels
+
+    def long_short_divsion(prepped):
+        len_seq = []
+        len_sen = []
+        short_seq = []
+        middle_seq = []
+        long_seq = []
+        short_sen = []
+        middle_sen = []
+        long_sen = []
+        for (seq,x,y,z) in prepped:
+            len_seq.append(len(seq))
+            if len(seq) <= 5:
+                short_seq.append(seq)
+            elif len(seq) > 5 and len(seq) <= 9:
+                middle_seq.append(seq)
+            elif len(seq) > 9:
+                long_seq.append(seq)
+
+            for sentence in seq:
+                if len(sentence) <= 7:
+                    short_sen.append(sentence)
+                elif len(sentence) > 7 and len(sentence)<= 12:
+                    middle_sen.append(sentence)
+                elif len(sentence) > 12:
+                    long += 1
+                    long_sen.append(sentence)
+                len_sen.append(len(sentence))
+        return short_seq, middle_seq, long_seq, short_sen, middle_sen, long_sen
 
     def parse_data(self, input_dir, split='train'):
         # Finding files
@@ -97,8 +176,8 @@ class DailyDialogue(Dataset):
             speakers[mask] = 0
 
             emos = np.asarray(line_emo.split(' ')[:-1]).astype(int)
-            acts = np.asarray(line_act.split(' ')[:-1]).astype(int)            
-            
+            acts = np.asarray(line_act.split(' ')[:-1]).astype(int)
+
             seq_len = len(seqs); emo_len = len(emos); act_len = len(acts)
             try:
                 assert seq_len == emo_len == act_len
@@ -122,7 +201,7 @@ class DailyDialogue(Dataset):
 
 
 class DailyDialogDataloader(BaseDataLoader):
-    def __init__(self, data_dir, split="train", batch_size=32, shuffle=False, validation_split=0.1, num_workers=2, collate_fn=None):
+    def __init__(self, data_dir, split, batch_size=32, shuffle=False, validation_split=0.1, num_workers=2, collate_fn=None):
         cwd = os.getcwd()
         loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
         word2idx, idx2word, embeddings = loader.load()
@@ -169,11 +248,20 @@ class collator(object):
 if __name__ == '__main__':
     cwd = os.getcwd()
     input_dir = cwd + '/data/EMNLP_dataset/'
-    splits = ['train', 'test', 'validation']
+    # splits = ['train', 'test', 'validation']
+    splits = ['test']
+    # for split in splits:
+    #     # import pdb; pdb.set_trace()
+    #     print(split)
+    #     dataloader = DailyDialogDataloader(input_dir, split= split,batch_size=32, shuffle=True, validation_split=0.2)
+    dataloader = DailyDialogDataloader(input_dir,split= 'test')
+    data = dataloader.dataset.sequences
+    prepped = dataloader.dataset.preprocessed
 
-    for split in splits:
-        import pdb; pdb.set_trace()
-        dataloader = DailyDialogDataloader(input_dir, batch_size=32, shuffle=True, validation_split=0.2)
-
-
-
+    no_emotion = []
+    anger = []
+    disgust - []
+    fear = []
+    happiness = []
+    sadness = []
+    surprise = []

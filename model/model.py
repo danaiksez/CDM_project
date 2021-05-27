@@ -26,7 +26,7 @@ class ThreeEncoders(BaseModel):
         self.batch_size = batch_size
         self.hidden = hidden
         self.num_classes = output_size
-        self.attention = False
+        self.attention = True
 
         self.diction = self.load_embeddings().to(DEVICE)
         self.dict_size = len(self.diction)
@@ -69,13 +69,16 @@ class ThreeEncoders(BaseModel):
         i = 0
         if speakers.shape[0] == 1:
             speakers = speakers[0]
+        attention_l = []
+        text_list = []
         for (utterance, speaker) in zip(utterances, speakers):
             i += 1
             output_emb = self.lookup(utterance).to(DEVICE) # (B, S, 300)
             if speaker == 0:
+
                 inputt = torch.cat((self.context_output, output_emb), dim=1) #(B, S+1, 300)
                 output, self.speaker1_hidden_state = self.speaker1(inputt, self.speaker1_hidden_state)
-  
+
                 self.context_output, self.context_hidden_state = self.context_encoder(
                                                                     self.speaker1_hidden_state,
                                                                     self.context_hidden_state)
@@ -93,12 +96,14 @@ class ThreeEncoders(BaseModel):
                             higher_word = self.idx2word[utterance[0][higher_weight-1].item()]
                         self.pos_tags.append(nltk.pos_tag([higher_word])[0][1])
                     if heatmap:
-                        import pdb; pdb.set_trace()
+                        # import pdb; pdb.set_trace()
                         words_list = [self.idx2word[w.item()] for w in utterance[0]]
                         words_list.insert(0, '[context]')
                         att_rescaled = output_att * 100
                         attention_list = (att_rescaled.squeeze(2).squeeze(0).detach().cpu()).tolist()
-                        generate(words_list, attention_list, 'results_heatmap'+str(i)+'.tex')
+                        attention_l.append(attention_list)
+                        text_list.append(words_list)
+                        # generate(words_list, attention_list, 'results_heatmap'+str(i)+'.tex')
 
                 output = self.linear1(output)
             else:
@@ -127,7 +132,9 @@ class ThreeEncoders(BaseModel):
                         words_list.insert(0, '[context]')
                         att_rescaled = output_att * 100
                         attention_list = (att_rescaled.squeeze(2).squeeze(0).detach().cpu()).tolist()
-                        generate(words_list, attention_list, 'results_heatmap'+str(i)+'.tex')
+                        attention_l.append(attention_list)
+                        text_list.append(words_list)
+                        # generate(words_list, attention_list, 'results_heatmap'+str(i)+'.tex')
 
                 output = self.linear2(output)
 
@@ -138,7 +145,7 @@ class ThreeEncoders(BaseModel):
                     outputs = torch.cat((outputs, output), dim=0)
             else:
                 outputs.append(output[0][-1])  # output: (B, S+1, classes
-        return outputs.to(DEVICE) if self.attention else torch.stack(outputs).to(DEVICE)
+        return outputs.to(DEVICE) if self.attention else torch.stack(outputs).to(DEVICE), text_list, attention_l
 
 
 class GRU(nn.Module):
@@ -155,11 +162,11 @@ class GRU(nn.Module):
         self.gru = nn.GRU(input_size=input_size, hidden_size=self.hidden, batch_first=bool(batch_first), bidirectional=False)
         self.output = nn.Linear(hidden, output_size)
         self.pos_tags = []
-        
+
         if self.attention:
             self.word = nn.Linear(hidden, hidden)
             self.context = nn.Linear(hidden, 1, bias=False)
-            
+
         self._init_hidden_state()
 
 
@@ -169,13 +176,13 @@ class GRU(nn.Module):
         else:
             batch_size = self.batch_size
         self.h_0 = torch.zeros(1, batch_size, self.hidden).to(DEVICE)  # changed order
-        
+
     def load_embeddings(self):
         cwd = os.getcwd()
         loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
         word2idx, self.idx2word, embeddings = loader.load()
         embeddings = torch.tensor(embeddings)
-        return embeddings.to(DEVICE) 
+        return embeddings.to(DEVICE)
 
 
     def forward(self, input, heatmap=False, postags=False):
@@ -224,23 +231,23 @@ class WordAttNet(nn.Module):
         self.gru = nn.GRU(300, 300, bidirectional = False, batch_first=True)
         self.word = nn.Linear(hidden_size, hidden_size)
         self.context = nn.Linear(hidden_size, 1, bias=False)
-       
+
         self.diction = self.load_embeddings()
         self.dict_size = len(self.diction)
         self.lookup = nn.Embedding(num_embeddings = self.dict_size, embedding_dim =300).from_pretrained(self.diction)
-        
+
     def load_embeddings(self):
         cwd = os.getcwd()
         loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
         word2idx, self.idx2word, embeddings = loader.load()
         embeddings = torch.tensor(embeddings)
-        return embeddings.to(DEVICE) 
+        return embeddings.to(DEVICE)
 
     def forward(self, inputs, hidden_state):
         #import pdb; pdb.set_trace()
         output_emb = self.lookup(inputs)
         f_output, h_output = self.gru(output_emb.float(), hidden_state)
-        
+
         output = self.word(f_output)
         output = self.context(output)
         output = F.softmax(output, dim=1)
@@ -257,14 +264,14 @@ class SentAttNet(nn.Module):
         self.sent = nn.Linear(hidden_size, hidden_size)
         self.context = nn.Linear(hidden_size, 1, bias=False)
         self.fc = nn.Linear(hidden_size, num_classes)
-        
+
 
     def forward(self, inputs, hidden_state):
         #import pdb; pdb.set_trace()
         outputs = []
         for sentence in inputs:
             f_output, h_output = self.gru(sentence.unsqueeze(0), hidden_state)
-        
+
             output = self.sent(f_output)
             output = self.context(output)
             output = F.softmax(output, dim=1)
@@ -283,7 +290,7 @@ class HierAttNet(nn.Module):
         self.num_classes = num_classes
         self.batch_size = batch_size
         self.hidden_size = hidden_size
-        
+
         self.sent_att_net = SentAttNet(self.hidden_size, num_classes)
         self.word_att_net_text = WordAttNet(self.hidden_size)
 
@@ -310,7 +317,7 @@ class HierAttNet(nn.Module):
             output_list_text.append(output_text)
 #            import pdb; pdb.set_trace()
             self.word_hidden_state = repackage_hidden(self.word_hidden_state)
-        
+
         # output_list_text = (S, B, 300)
         output, self.sent_hidden_state = self.sent_att_net(output_list_text, self.sent_hidden_state)
         self.sent_hidden_state = repackage_hidden(self.sent_hidden_state)
