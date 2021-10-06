@@ -1,19 +1,48 @@
 {
     "name": "Mnist_LeNet",
-    "n_gpu": 1,
+    "n_gpu": 0,
 
     "arch": {
-        "type": "MnistModel",
-        "args": {}
+        "type": "LSTM",
+        "args": {
+            "input_size": 300,
+            "hidden": 300,
+            "num_layers": 1,
+            "output_size": 7,
+            "batch_first": "True"
+        }
     },
-    "data_loader": {
-        "type": "MnistDataLoader",
+    "train_data_loader": {
+        "type": "DailyDialogDataloader",
         "args":{
-            "data_dir": "data/",
-            "batch_size": 128,
+            "data_dir": "data/EMNLP_dataset/",
+            "split": "train",
+            "batch_size": 1,
             "shuffle": true,
-            "validation_split": 0.1,
-            "num_workers": 2
+            "validation_split": 0.2,
+            "num_workers": 0
+        }
+    },
+    "valid_data_loader": {
+        "type": "DailyDialogDataloader",
+        "args":{
+            "data_dir": "data/EMNLP_dataset/",
+            "split": "validation",
+            "batch_size": 1,
+            "shuffle": true,
+            "validation_split": 0.0,
+            "num_workers": 1
+        }
+    },
+    "test_data_loader": {
+        "type": "DailyDialogDataloader",
+        "args":{
+            "data_dir": "data/EMNLP_dataset/",
+            "split": "test",
+            "batch_size": 1,
+            "shuffle": true,
+            "validation_split": 0.0,
+            "num_workers": 1
         }
     },
     "optimizer": {
@@ -24,7 +53,7 @@
             "amsgrad": true
         }
     },
-    "loss": "nll_loss",
+    "loss": "CrossEntropy_loss",
     "metrics": [
         "accuracy", "top_k_acc"
     ],
@@ -36,14 +65,14 @@
         }
     },
     "trainer": {
-        "epochs": 100,
+        "epochs": 10,
 
         "save_dir": "saved/",
         "save_period": 1,
         "verbosity": 2,
-        
+
         "monitor": "min val_loss",
-        "early_stop": 10,
+        "early_stop": 8,
 
         "tensorboard": true
     }

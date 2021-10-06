@@ -1,13 +1,9 @@
-#from torchvision import datasets, transforms
-from base import BaseDataLoader
-
-
 #adapted from https://github.com/Sanghoon94/DailyDialogue-Parser/blob/master/parser.py
-#from base.base_data_loader import BaseDataLoader
+from base.base_data_loader import BaseDataLoader
 import os, sys, torch, re
 import numpy as np
 
-from data_loader.transforms import ToTokenIds, ReplaceUnknownToken, ToTensor, PunctTokenizer
+from transforms import ToTokenIds, ReplaceUnknownToken, ToTensor, PunctTokenizer
 from slp.util.embeddings import EmbeddingsLoader
 
 from torchvision.transforms import Compose
@@ -74,37 +70,15 @@ class DailyDialogue(Dataset):
                 if self.text_transforms is not None:
                     seq = self.text_transforms(remove_punctuation(seq))
                 segment.append(seq)
-            emotions.append(emos); dacts.append(acts); sequences.append(segment); spkrs.append(speakers)
+            
+            emotions.append(torch.tensor(emos)); dacts.append(acts); sequences.append(segment); spkrs.append(speakers)
         return sequences, emotions, dacts, spkrs
 
     def __getitem__(self, idx):
         return self.sequences[idx], self.emotions[idx], self.actions[idx], self.speakers[idx]
 
-"""
-class collator(object):
-    def __init__(self, device='cpu'):
-        self.device = device
-
-    def __call__(self, batch):
-        data, emotions, acts, speakers = map(list, zip(*batch))
-        data = np.asarray(data)
-        
-        max_dialog = 0
-        for dialog in data:
-            if len(dialog) > max_dialog:
-                max_dialog = len(dialog)
-
-
-        data = torch.tensor(outs).T
-        emotions = torch.tensor(emotions)
-        acts = torch.tensor(acts)
-        speakers = torch.tensor(speakers)
-        return data, sensitive, targets
-"""
-
 class DailyDialogDataloader(BaseDataLoader):
     def __init__(self, data_dir, split="train", batch_size=32, shuffle=False, validation_split=0.1, num_workers=2, collate_fn=None):
-        cwd = os.getcwd()
         loader = EmbeddingsLoader(cwd + '/data/embeddings/glove.6B.300d.txt', 300)
         word2idx, idx2word, embeddings = loader.load()
         embeddings = torch.tensor(embeddings)
@@ -119,7 +93,8 @@ class DailyDialogDataloader(BaseDataLoader):
             to_token_ids,
             to_tensor])
         self.dataset = DailyDialogue(data_dir, split, self.text_transforms)
-        super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers)
+        super().__init__(self.dataset, batch_size, shuffle, validation_split, num_workers, collate_fn=collate_fn)
+
 
 
 if __name__ == '__main__':
